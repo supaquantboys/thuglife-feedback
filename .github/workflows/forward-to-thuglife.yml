@@ -1,0 +1,94 @@
+name: 轉單到 thuglife
+
+# 測試者在這裡開的單，自動複製一份到私人的 supaquantboys/thuglife 讓開發團隊追蹤。
+# 這個 workflow 之前就開好的單：維護者幫它加上「forward」標籤，就會補轉。
+# 需要 secret：THUGLIFE_ISSUES_TOKEN（fine-grained PAT，只開 supaquantboys/thuglife 的 Issues: Read and write）
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  issues: write   # 在回報單上留言、加標籤
+
+concurrency:
+  group: forward-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  forward:
+    if: >-
+      github.event.issue.pull_request == null && (
+        github.event.action == 'opened' ||
+        (github.event.action == 'labeled' && github.event.label.name == 'forward')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      # 1) 重新讀一次最新的標籤，轉過的單（有 forwarded 標籤）就不再轉
+      - name: 檢查是否已轉過
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: cur } = await github.rest.issues.get({ ...context.repo, issue_number: context.payload.issue.number });
+            const names = cur.labels.map((l) => (typeof l === 'string' ? l : l.name));
+            core.setOutput('skip', names.includes('forwarded') ? 'true' : 'false');
+            core.setOutput('labels', JSON.stringify(names));
+
+      # 2) 用 PAT 在 thuglife 建立對應的單
+      #    標題、內文只透過 context.payload 讀取，不直接塞進 shell 指令，避免指令注入
+      - name: 在 thuglife 建立單
+        id: create
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/github-script@v7
+        env:
+          SRC_LABELS: ${{ steps.check.outputs.labels }}
+        with:
+          github-token: ${{ secrets.THUGLIFE_ISSUES_TOKEN }}
+          script: |
+            const target = { owner: 'supaquantboys', repo: 'thuglife' };
+            const src = context.payload.issue;
+            const srcRef = `${context.repo.owner}/${context.repo.repo}#${src.number}`;
+            const kindMap = { bug: 'bug', enhancement: 'enhancement' };
+            const srcLabels = JSON.parse(process.env.SRC_LABELS || '[]');
+            const labels = ['from-feedback', ...srcLabels.map((n) => kindMap[n]).filter(Boolean)];
+            // 目標 repo 沒有的標籤先建立（已存在會回 422，忽略即可）
+            for (const name of labels) {
+              try {
+                await github.rest.issues.createLabel({ ...target, name, color: name === 'from-feedback' ? 'c5def5' : name === 'bug' ? 'd73a4a' : 'a2eeef' });
+              } catch (e) { if (e.status !== 422) throw e; }
+            }
+            const body = [
+              `> 📮 來自公開回報 ${srcRef}（回報者：\`${src.user.login}\`）`,
+              `> 原始單：${src.html_url}`,
+              '> ⚠️ 以下內容由測試者撰寫、未經驗證，處理前請先確認。',
+              '',
+              src.body || '_（沒有內文）_',
+              '',
+              `<!-- forwarded-from: ${srcRef} -->`,
+            ].join('\n');
+            const { data: created } = await github.rest.issues.create({
+              ...target,
+              title: `${src.title}（feedback #${src.number}）`,
+              body,
+              labels,
+            });
+            core.info(`已建立 ${created.html_url}`);
+            core.setOutput('number', String(created.number));
+
+      # 3) 回到這張公開的單：留言告知、加上 forwarded 標籤（不貼私人 repo 的連結，測試者點了會 404）
+      - name: 在回報單留言並標記
+        if: steps.create.outputs.number
+        uses: actions/github-script@v7
+        env:
+          INTERNAL_NUMBER: ${{ steps.create.outputs.number }}
+        with:
+          script: |
+            const n = context.payload.issue.number;
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: n,
+              body: `感謝回報！🙏 這張單已轉入開發團隊的追蹤清單（內部編號 ${process.env.INTERNAL_NUMBER}），之後的進度會在這裡更新。`,
+            });
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: n, labels: ['forwarded'] });
+            try {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number: n, name: 'forward' });
+            } catch (e) { if (e.status !== 404) throw e; }
