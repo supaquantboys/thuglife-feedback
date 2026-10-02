@@ -1,0 +1,48 @@
+name: 問題回報
+description: 網站錯誤、登入失敗或操作異常
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "此回報會公開，請勿提供密碼、驗證碼、token 或其他私人資料。"
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題描述
+      description: 發生了什麼問題？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      placeholder: "1. 開啟哪個頁面
+2. 點擊哪個按鈕
+3. 出現什麼結果"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期結果與實際結果
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 裝置與瀏覽器
+      placeholder: "例如 iPhone / iOS 18 / Safari，或 Windows 11 / Chrome"
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: 問題頁面網址
+      description: 請移除網址中的 token 或私人參數。
+      placeholder: "https://thuglife.kobebryant6082.workers.dev"
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截圖或補充資訊
+      description: 可拖曳圖片上傳，請先遮蔽個人資料。
