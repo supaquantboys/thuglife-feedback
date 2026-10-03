@@ -1,1 +1,5 @@
 blank_issues_enabled: false
+contact_links:
+  - name: 🔒 私下回報資安問題
+    url: https://github.com/supaquantboys/thuglife-feedback/security/advisories/new
+    about: 資安問題請勿開公開 Issue，請改用 GitHub 的私下回報（Security 分頁 > Report a vulnerability），只有維護者看得到。

@@ -5,6 +5,9 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
+      value: "⚠️ 發現資安問題（漏洞、可繞過的限制、資料外洩等）請勿在這裡公開回報，請改用[私下回報資安問題](https://github.com/supaquantboys/thuglife-feedback/security/advisories/new)，詳見 [SECURITY.md](https://github.com/supaquantboys/thuglife-feedback/blob/main/SECURITY.md)。"
+  - type: markdown
+    attributes:
       value: "此回報會公開，請勿提供密碼、驗證碼、token 或其他私人資料。"
   - type: textarea
     id: problem
