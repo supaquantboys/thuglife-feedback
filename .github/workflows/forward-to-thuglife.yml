@@ -92,3 +92,40 @@ jobs:
             try {
               await github.rest.issues.removeLabel({ ...context.repo, issue_number: n, name: 'forward' });
             } catch (e) { if (e.status !== 404) throw e; }
+
+      # 4) 用 Telegram 通知 Joey，附「開始修／忽略」按鈕（Jarvis 收到按鈕後先看內容再交給本機 Claude）
+      #    標題、內文是公開回報者寫的，只透過 context.payload 讀取、以純文字送出（不用 parse_mode），避免注入
+      - name: Telegram 通知 Joey
+        if: steps.create.outputs.number
+        uses: actions/github-script@v7
+        env:
+          INTERNAL_NUMBER: ${{ steps.create.outputs.number }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        with:
+          script: |
+            const { TG_TOKEN, TG_CHAT, INTERNAL_NUMBER: n } = process.env;
+            if (!TG_TOKEN || !TG_CHAT) { core.warning('沒有 TELEGRAM_BOT_TOKEN／TELEGRAM_CHAT_ID，略過通知'); return; }
+            const src = context.payload.issue;
+            const clip = (s, max) => { s = (s || '').replace(/\s+/g, ' ').trim(); return s.length > max ? s.slice(0, max) + '…' : s; };
+            const text = [
+              `📮 新回報轉進 thuglife #${n}`,
+              `標題：${clip(src.title, 120)}`,
+              `回報者：${src.user.login}（feedback #${src.number}）`,
+              `內容摘要：${clip(src.body, 300) || '（沒有內文）'}`,
+              '',
+              '⚠️ 公開回報者寫的，未經驗證。按「開始修」後 Jarvis 會先看過內容再交給本機 Claude。',
+              `https://github.com/supaquantboys/thuglife/issues/${n}`,
+            ].join('\n');
+            const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: TG_CHAT,
+                text,
+                disable_web_page_preview: true,
+                reply_markup: { keyboard: [[{ text: `▶️ 開始修 #${n}` }], [{ text: `忽略 #${n}` }]], one_time_keyboard: true, resize_keyboard: true },
+              }),
+            });
+            if (!res.ok) core.warning(`Telegram 通知失敗：HTTP ${res.status}`);
+            else core.info(`已用 Telegram 通知 Joey：thuglife #${n}`);
